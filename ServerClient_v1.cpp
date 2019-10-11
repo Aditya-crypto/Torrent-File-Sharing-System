@@ -9,10 +9,12 @@
 #include<stdio.h>
 #include<string.h>
 #include <stdlib.h>
+#include<map>
+#include<vector>
 #define BufferSize 50
 #define QUE 5
-//map<string,vector<int> > chunksdownloaded;
 using namespace std;
+map<int,int> requestlist; // first:requestport, second: gid to which request arrived
 struct chunk_info
 {
      int chunk_no;
@@ -25,6 +27,7 @@ struct part_info
     int portno;
 };
 int serverport;
+int trackerportno;
 void* recieve(void* arg)
 {
      
@@ -114,6 +117,194 @@ void* Download_file(void* arg)
           }
     
 }
+void* creat_group(void* arg)
+{
+    int* trackerport=(int*)malloc(sizeof(int));
+    trackerport=(int*)arg;
+    int trackerPortRetrieve=*trackerport;
+    int sp=socket(AF_INET,SOCK_STREAM,0);
+    struct sockaddr_in addr;
+    memset(&addr,'\0',sizeof(addr));
+    addr.sin_family=AF_INET;
+    addr.sin_port=htons(trackerPortRetrieve);
+    addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+    int n;
+    int res =  connect(sp,(struct sockaddr*)&addr,sizeof(addr));
+        if(res<0)
+        {
+          perror("errorrrrrrr");
+          exit(0);
+        }
+        else
+          cout<<"connected with tracker\n";
+        char ackr='G';
+        while(1)
+        {
+           if(send(sp,&ackr,sizeof(ackr),0)<0)
+            perror("ack not sent");
+          else
+            break;
+        }
+        cout<<"enter group id\n";
+        int gid;
+        cin>>gid;
+         if((n=send(sp,&gid,sizeof(int),0))<0)
+              perror("sending failed");
+         if((n=send(sp,&serverport,sizeof(int),0))<0)
+              perror("sending failed");
+         char ack;
+         recv(sp,&ack,sizeof(ack),0);
+         if(ack=='#')
+         cout<<"successfully created group\n";
+         else
+         cout<<"group creation failed\n";
+    close(sp);
+    pthread_exit(0);
+    
+}
+void* join_group(void* arg)
+{
+    int* trackerport=(int*)malloc(sizeof(int));
+    trackerport=(int*)arg;
+    int trackerPortRetrieve=*trackerport;
+    int sp=socket(AF_INET,SOCK_STREAM,0);
+    struct sockaddr_in addr;
+    memset(&addr,'\0',sizeof(addr));
+    addr.sin_family=AF_INET;
+    addr.sin_port=htons(trackerPortRetrieve);
+    addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+    int n;
+    int res =  connect(sp,(struct sockaddr*)&addr,sizeof(addr));
+        if(res<0)
+        {
+          perror("errorrrrrrr");
+          exit(0);
+        }
+        else
+          cout<<"connected with tracker\n";
+        char ackr='J';
+       
+           if(send(sp,&ackr,sizeof(ackr),0)<0)
+            perror("ack not sent");
+        cout<<"enter group id\n";
+        int gid;
+        cin>>gid;
+         if((n=send(sp,&gid,sizeof(int),0))<0)
+              perror("sending failed");
+         if((n=send(sp,&serverport,sizeof(int),0))<0)
+              perror("sending failed");
+         char ack;
+         recv(sp,&ack,sizeof(ack),0);
+         if(ack=='#')
+         cout<<"request sent\n";
+         else
+         cout<<"request denied\n";
+    close(sp);
+    pthread_exit(0);
+    
+}
+void* accept_request(void* arg)
+{
+      int* trackerport=(int*)malloc(sizeof(int));
+      trackerport=(int*)arg;
+      int trackerPortRetrieve=*trackerport;
+      int friendport;
+      string mode;
+      cout<<"enter the mode for accepting\n";
+      cin>>mode;
+      int sp;
+      if(mode=="single")
+        {
+           cout<<"enter request\n";
+           cin>>friendport;
+          ///////////////////////////////////////////add user in the group
+           sp=socket(AF_INET,SOCK_STREAM,0);
+           struct sockaddr_in addr;
+           memset(&addr,'\0',sizeof(addr));
+           addr.sin_family=AF_INET;
+           addr.sin_port=htons(trackerPortRetrieve);
+           addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+           int n;
+           int res =  connect(sp,(struct sockaddr*)&addr,sizeof(addr));
+           if(res<0)
+           {
+             perror("errorrrrrrr");
+             exit(0);
+           }
+           else
+           cout<<"connected with tracker\n";
+            char ackr='A';
+            if(send(sp,&ackr,sizeof(ackr),0)<0)
+            perror("ack not sent");
+            int gid=requestlist[friendport];
+            if(send(sp,&gid,sizeof(ackr),0)<0)
+                perror("gid not sent");
+            if(send(sp,&friendport,sizeof(int),0)<0)
+                perror("friendport not sent");
+            char ack;
+          recv(sp,&ack,sizeof(ack),0);
+          if(ack=='#')
+             {
+               cout<<"new user added in your group\n";
+               requestlist.erase(friendport);
+             }
+          else
+            cout<<"failed to add new user\n";
+            close(sp);
+          //////////////////////////////////////////send ack to friendport for their request
+           sp=socket(AF_INET,SOCK_STREAM,0);
+           memset(&addr,'\0',sizeof(addr));
+           addr.sin_family=AF_INET;
+           addr.sin_port=htons(friendport);
+           addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+           res =  connect(sp,(struct sockaddr*)&addr,sizeof(addr));
+           if(res<0)
+           {
+             perror("errorrrrrrr");
+             exit(0);
+           }
+           else
+           cout<<"connected with friendport\n";
+           ackr='A';
+            if(send(sp,&ackr,sizeof(ackr),0)<0)
+               perror("ack not sent");
+        }
+      close(sp);
+    pthread_exit(0); 
+}
+void* list_groups(void* arg)
+{
+      int* trackerport=(int*)malloc(sizeof(int));
+      trackerport=(int*)arg;
+      int trackerPortRetrieve=*trackerport;
+      int sp=socket(AF_INET,SOCK_STREAM,0);
+           struct sockaddr_in addr;
+           memset(&addr,'\0',sizeof(addr));
+           addr.sin_family=AF_INET;
+           addr.sin_port=htons(trackerPortRetrieve);
+           addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+           int n;
+           int res =  connect(sp,(struct sockaddr*)&addr,sizeof(addr));
+           if(res<0)
+           {
+             perror("errorrrrrrr");
+             exit(0);
+           }
+           else
+           cout<<"connected with tracker\n";
+            char ackr='L';
+            if(send(sp,&ackr,sizeof(ackr),0)<0)
+            perror("ack not sent");
+           int size;
+           recv(sp,&size,sizeof(int),0);
+           while(size--)
+           {
+                 int gid;
+                 recv(sp,&gid,sizeof(int),0);
+                 cout<<gid<<" ";
+           }
+           
+}
 ///////////////////what client will do
 void* client(void* arg)
 {
@@ -124,6 +315,8 @@ void* client(void* arg)
      pthread_attr_t attr;
      pthread_attr_init(&attr);
      string what;
+  while(1)
+   {
      cin>>what;
      char ack;
      if(what=="download")
@@ -133,11 +326,45 @@ void* client(void* arg)
              pthread_join(tid_l,NULL);
     
      }
+     else if(what=="creategroup")
+     {
+            if(pthread_create(&tid_l,&attr,creat_group,&trackerPortRetrieve)<0)
+             perror("creation error");
+             pthread_join(tid_l,NULL);
+     }
+     else if(what=="joingroup")
+     {
+            if(pthread_create(&tid_l,&attr,join_group,&trackerPortRetrieve)<0)
+             perror("creation error");
+             pthread_join(tid_l,NULL);
+     }
+     else if(what=="listrequest")
+     {
+             map<int,int>::iterator it ;
+             for(it =requestlist.begin();it!=requestlist.end();++it)
+             {
+                 cout <<"requestport " << it->first<<"\n";
+             }
+     }
+     else if(what=="acceptrequest")
+     {
+             if(pthread_create(&tid_l,&attr,accept_request,&trackerPortRetrieve)<0)
+             perror("creation error");
+             pthread_join(tid_l,NULL);
+     }
+     else if(what=="listgroups")
+     {
+             if(pthread_create(&tid_l,&attr,list_groups,&trackerPortRetrieve)<0)
+             perror("creation error");
+             pthread_join(tid_l,NULL);
+     }
      else
      cout<<"not coded\n";
+   }
      pthread_exit(0);   
        
 }
+
 ///// server code
 void* handle_client(void* arg)
 {   
@@ -203,6 +430,20 @@ void* server(void* arg)
                      perror("creation error");
                 pthread_join(tid,NULL);
              }
+          if(ack=='J')
+            {
+                char ack='#';
+                int RequestPort,gid;
+                recv(connfd,&RequestPort,sizeof(int),0);
+                recv(connfd,&gid,sizeof(int),0);
+                requestlist[RequestPort]=gid;
+                cout<<"request Queued\n";
+                send(connfd,&ack,sizeof(ack),0);
+             }
+          if(ack=='A')
+          {
+              cout<<"Request Accepted\n";
+          }
         close(connfd);
         fflush(stdout); 
      }
@@ -319,6 +560,7 @@ int main(int argc,char* argv[])
      string what;
      serverport=atoi(argv[1]);
      int tracker_port=atoi(argv[2]);
+     trackerportno=tracker_port;
      //cout<<port<<"\n";
      cout<<"for new user press[Y/N] ?";
      char d;
