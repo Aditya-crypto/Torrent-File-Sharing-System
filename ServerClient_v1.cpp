@@ -237,7 +237,7 @@ void* accept_request(void* arg)
             if(send(sp,&ackr,sizeof(ackr),0)<0)
             perror("ack not sent");
             int gid=requestlist[friendport];
-            if(send(sp,&gid,sizeof(ackr),0)<0)
+            if(send(sp,&gid,sizeof(gid),0)<0)
                 perror("gid not sent");
             if(send(sp,&friendport,sizeof(int),0)<0)
                 perror("friendport not sent");
@@ -272,6 +272,49 @@ void* accept_request(void* arg)
       close(sp);
     pthread_exit(0); 
 }
+void* upload_files(void* arg)
+{
+      int* trackerport=(int*)malloc(sizeof(int));
+      trackerport=(int*)arg;
+      int trackerPortRetrieve=*trackerport;
+      int sp=socket(AF_INET,SOCK_STREAM,0);
+           struct sockaddr_in addr;
+           memset(&addr,'\0',sizeof(addr));
+           addr.sin_family=AF_INET;
+           addr.sin_port=htons(trackerPortRetrieve);
+           addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+           int n;
+           int res =  connect(sp,(struct sockaddr*)&addr,sizeof(addr));
+           if(res<0)
+           {
+             perror("errorrrrrrr");
+             exit(0);
+           }
+           else
+           cout<<"connected with tracker\n";
+            char ackr='U';
+            if(send(sp,&ackr,sizeof(ackr),0)<0)
+            perror("ack not sent");
+            int gid;
+            cout<<"enter group_id: \n";
+            cin>>gid;
+            int n_gid=gid;
+            int n_serverport=serverport;
+            if(send(sp,&n_gid,sizeof(int),0)<0)
+                perror("gid not sent");
+            if(send(sp,&n_serverport,sizeof(int),0)<0)
+                perror("friendport not sent");
+            char ack;
+          recv(sp,&ack,sizeof(ack),0);
+          if(ack=='#')
+             {
+               cout<<"uploaded\n";
+             }
+          else
+            cout<<"not uploaded\n";
+            close(sp);
+            pthread_exit(0);
+ }
 void* list_groups(void* arg)
 {
       int* trackerport=(int*)malloc(sizeof(int));
@@ -355,6 +398,12 @@ void* client(void* arg)
      else if(what=="listgroups")
      {
              if(pthread_create(&tid_l,&attr,list_groups,&trackerPortRetrieve)<0)
+             perror("creation error");
+             pthread_join(tid_l,NULL);
+     }
+     else if(what=="upload")
+     {
+             if(pthread_create(&tid_l,&attr,upload_files,&trackerPortRetrieve)<0)
              perror("creation error");
              pthread_join(tid_l,NULL);
      }
