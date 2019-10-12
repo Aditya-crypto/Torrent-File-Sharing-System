@@ -10,10 +10,14 @@
 #include<map>
 #include<vector>
 #include<stdlib.h>
+
 using namespace std;
 map<string,string> mp; // map for user validation and new registrations
 map<int,int> groupadmin;// map used for keeping admin info first: gid
 map<int,vector<int> > groupusers;// map used for tracking all users in a group
+map<int,vector<string> > lof;    //list of files in a group
+map<string,vector<string> > fileinfo; //file information fn:size,loc,sha
+map<string,vector<int> > fileusers;// list of users having that file
 class RequestInfo
 {
   public:
@@ -85,6 +89,7 @@ void* groupCreation(void* arg)
            groupusers[gid].push_back(adminport);
            send(connfd,&ack,sizeof(ack),0);
            cout<<"group-created\n";
+            fflush(stdout);
            pthread_exit(0);
 }
 void* SendToAdmin(void* arg)
@@ -198,11 +203,13 @@ int main(int argc,char* argv[])
      {
         int gid,friendport;
         recv(connfd,&gid,sizeof(int),0);
-        recv(connfd,&gid,sizeof(int),0);
+        recv(connfd,&friendport,sizeof(int),0);
+        //cout<<gid<<" "<<friendport;
         groupusers[gid].push_back(friendport);
         char ackr='#';
         if(send(connfd,&ackr,sizeof(ackr),0)<0)
             perror("ack not sent");
+            fflush(stdout);
      } 
      else if(ack=='L')             // list groups
      {
@@ -217,6 +224,28 @@ int main(int argc,char* argv[])
                  if(send(connfd,&gid,sizeof(int),0)<0)
                       perror("gid not sent");
              }
+     } 
+     else if(ack=='U')          //accept-request after work for the tracker
+     {
+        int gid,friendport;
+        recv(connfd,&gid,sizeof(int),0);
+        recv(connfd,&friendport,sizeof(int),0);
+        //cout<<gid<<" "<<friendport;
+        //groupusers[gid].push_back(friendport);
+        map<int,vector<int> >:: iterator it=groupusers.find(gid);
+        if(it!=groupusers.end())
+        {
+             vector<int> v(it->second);
+             vector<int>::iterator i;
+             for(i=v.begin();i<v.end();i++)
+             {
+                cout<<*i<<" ";
+             }
+        }
+        char ackr='#';
+        if(send(connfd,&ackr,sizeof(ackr),0)<0)
+            perror("ack not sent");
+            fflush(stdout);
      }    
      else      
      cout<<"not coded\n";
