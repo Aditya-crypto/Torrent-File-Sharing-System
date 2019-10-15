@@ -11,7 +11,8 @@
 #include <stdlib.h>
 #include<map>
 #include<vector>
-#define BufferSize 340788
+#include<openssl/sha.h>
+#define BufferSize 524288
 #define QUE 5
 using namespace std;
 map<int,int> requestlist; // first:requestport, second: gid to which request arrived
@@ -327,6 +328,25 @@ void* accept_request(void* arg)
       close(sp);
     pthread_exit(0); 
 }
+string getsha(FILE* fp)
+{
+     unsigned char buffer[BufferSize],outputBuf[20];
+	int n;
+	char temp[40];
+	string hash="",finalHash="";
+	while((n=fread(buffer,sizeof(buffer),1,fp))>0){
+		hash="";
+		buffer[n]='\0';
+		SHA1(buffer,n,outputBuf);
+		for(int i=0; i<20; i++){
+			sprintf(temp,"%02x",outputBuf[i]);
+			hash+=temp;
+		}
+		finalHash+=hash.substr(0,20);
+	}
+	string s=finalHash.substr(0,20);
+	return s;
+}
 void* upload_files(void* arg)
 {
       int* trackerport=(int*)malloc(sizeof(int));
@@ -373,7 +393,7 @@ void* upload_files(void* arg)
             cin>>filename;
             cout<<"enter FileLocation:\n ";
             cin>>fileLocation;
-            char fname[100],floc[100];
+            char fname[100],floc[100],shaarray[100];
             strcpy(fname,filename.c_str());
             strcpy(floc,fileLocation.c_str());
             if(send(sp,&fname,sizeof(fname),0)<0)
@@ -381,6 +401,11 @@ void* upload_files(void* arg)
             if(send(sp,&floc,sizeof(floc),0)<0)
                 perror("friendport not sent");
             FILE* fp=fopen(fname,"rb");
+            string hash=getsha(fp);
+            strcpy(shaarray,hash.c_str());
+            if(send(sp,&shaarray,sizeof(shaarray),0)<0)
+                perror("friendport not sent");
+            cout<<"hash value: "<<hash<<"\n";
             fseek(fp,0,SEEK_END);
   	    long long filesize=ftell(fp);
   	    fclose(fp);
@@ -429,6 +454,45 @@ void* list_groups(void* arg)
                  recv(sp,&gid,sizeof(int),0);
                  cout<<gid<<" ";
            }
+           
+}
+void* list_files(void* arg)
+{     
+      int* trackerport=(int*)malloc(sizeof(int));
+      trackerport=(int*)arg;
+      int trackerPortRetrieve=*trackerport;
+      int sp=socket(AF_INET,SOCK_STREAM,0);
+           struct sockaddr_in addr;
+           memset(&addr,'\0',sizeof(addr));
+           addr.sin_family=AF_INET;
+           addr.sin_port=htons(trackerPortRetrieve);
+           addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+           int n;
+           int res =  connect(sp,(struct sockaddr*)&addr,sizeof(addr));
+           if(res<0)
+           {
+             perror("errorrrrrrr");
+             exit(0);
+           }
+           else
+           cout<<"connected with tracker\n";
+            char ackr='F';
+            if(send(sp,&ackr,sizeof(ackr),0)<0)
+            perror("ack not sent");
+            cout<<"enter groupid:\n";
+            int gid;
+            cin>>gid;
+            if(send(sp,&gid,sizeof(gid),0)<0)
+               perror("ack not sent");
+           int size;
+           recv(sp,&size,sizeof(int),0);
+           while(size--)
+           {
+                 char fname[100];
+                 recv(sp,&fname,sizeof(fname),0);
+                 cout<<fname<<" ";
+           }
+           cout<<"\n";
            
 }
 ///////////////////what client will do
@@ -487,6 +551,12 @@ void* client(void* arg)
      else if(what=="upload")
      {
              if(pthread_create(&tid_l,&attr,upload_files,&trackerPortRetrieve)<0)
+             perror("creation error");
+             pthread_join(tid_l,NULL);
+     }
+     else if(what=="listfiles")
+     {
+             if(pthread_create(&tid_l,&attr,list_files,&trackerPortRetrieve)<0)
              perror("creation error");
              pthread_join(tid_l,NULL);
      }
