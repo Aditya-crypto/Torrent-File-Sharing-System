@@ -344,7 +344,7 @@ int main(int argc,char* argv[])
                     perror("ack not sent"); 
                  //cout<<"\n";
                 long long n;
-                char fname[100],floc[100];
+                char fname[100],floc[100],sharray[100];
                 if(n=recv(connfd, &fname,sizeof(fname),0)<0)
                 perror("fname recieving failed\n");
                 string filename(fname);
@@ -354,6 +354,9 @@ int main(int argc,char* argv[])
                 long long filesize;
                 if(n=recv(connfd, &filesize,sizeof(filesize),0)<0)
                         perror("filesize recieving failed");
+                 if(n=recv(connfd, &sharray,sizeof(sharray),0)<0)
+                perror("fname recieving failed\n");
+                string finalsha(sharray);      
                // cout<<"fname: "<<filename<<"floc :"<<fileLocation<<"filesize: "<<filesize<<"\n";
                 char filesz[100];
                 snprintf(filesz, sizeof(filesz), "%lld", filesize); 
@@ -361,6 +364,7 @@ int main(int argc,char* argv[])
                 fileusers[filename].push_back(friendport);//updated fileusers
                 sizeoffile[filename]=filesize;        //fileinfo added in the map
                 fileinfo[filename].push_back(fileLocation);  //fileinfo updated
+                fileinfo[filename].push_back(finalsha);
                 lof[gid].push_back(filename);//list of files in a group
                 ackr='#';
                 if(send(connfd,&ackr,sizeof(ackr),0)<0)
