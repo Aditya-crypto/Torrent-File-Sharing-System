@@ -10,7 +10,7 @@
 #include<map>
 #include<vector>
 #include<stdlib.h>
-
+#include<string.h>
 using namespace std;
 map<string,string> mp; // map for user validation and new registrations
 map<int,int> groupadmin;// map used for keeping admin info first: gid
@@ -18,6 +18,7 @@ map<int,vector<int> > groupusers;// map used for tracking all users in a group
 map<int,vector<string> > lof;    //list of files in a group
 map<string,vector<string> > fileinfo; //file information fn:size,loc,sha
 map<string,vector<int> > fileusers;// list of users having that file
+map<string,long long> sizeoffile; //keeping file size info
 class RequestInfo
 {
   public:
@@ -140,6 +141,87 @@ void* SendToAdmin(void* arg)
     close(sp);
     pthread_exit(0);
 }
+void* downloadfile(void* arg)
+{
+           int *t=(int*)arg;
+           int connfd=*t;
+           int n,gid,friendport;
+           if(n=recv(connfd, &gid,sizeof(int),0)<0)
+                perror("gid recieving failed\n");
+           if(n=recv(connfd, &friendport,sizeof(int),0)<0)
+                perror("adminport recieving failed");
+          int flag=0;
+        char ackr;
+        map<int,vector<int> >:: iterator it=groupusers.find(gid);
+        if(it!=groupusers.end())
+        {
+             vector<int> v(it->second);
+             vector<int>::iterator i;
+             for(i=v.begin();i<v.end();i++)
+             {
+                //cout<<*i<<" ";
+                if(*i==friendport)
+                {
+                     flag=1;
+                     break;
+                }
+             }
+        }
+        if(flag!=1)
+        {
+                ackr='$';
+                if(send(connfd,&ackr,sizeof(ackr),0)<0)
+                perror("ack not sent"); 
+        }
+        else
+        {
+                ackr='#';
+                if(send(connfd,&ackr,sizeof(ackr),0)<0)
+                        perror("ack not sent");
+                        
+                char fname[100];
+                if(n=recv(connfd,&fname,sizeof(fname),0)<0)
+                   perror("gid recieving failed\n");
+                   
+                map<string,vector<string> >:: iterator itr=fileinfo.find(fname);
+                
+                if(itr!=fileinfo.end())
+                        {  
+                           vector<string> v(itr->second);
+                           vector<string>::iterator i;
+                           //string filesize=*i;
+                           long long fsize=sizeoffile[fname];
+                           //char fsize[100];
+                           //strcpy(fsize,filesize.c_str());
+                           
+                            if(send(connfd,&fsize,sizeof(fsize),0)<0)
+                                 perror("ack not sent"); 
+                            cout<<"success6\n";
+                        }
+                map<string,vector<int> >::iterator itr1=fileusers.find(fname);
+                if(itr1!=fileusers.end())
+                        {
+                           int lop[10],j=0;
+                           vector<int> v(itr1->second);
+                           vector<int>::iterator i;
+                           for(i=v.begin();i<v.end();i++)
+                               {
+                                   lop[j++]=*i;
+                                   cout<<"in download section "<<*i<<" ";
+                                   
+                               }
+                              /* for(int k=0;k<4;k++)
+                               {
+                                    cout<<lop[k]<<" ";
+                               }
+                               cout<<"\n";*/
+                           if(send(connfd,lop,sizeof(lop),0)<0)
+                                 perror("ack not sent"); 
+                          }
+        }
+      fflush(stdout);
+      pthread_exit(0);
+}
 int main(int argc,char* argv[])
 {
      int port=atoi(argv[1]);
@@ -232,6 +314,8 @@ int main(int argc,char* argv[])
         recv(connfd,&friendport,sizeof(int),0);
         //cout<<gid<<" "<<friendport;
         //groupusers[gid].push_back(friendport);
+        int flag=0;
+        char ackr;
         map<int,vector<int> >:: iterator it=groupusers.find(gid);
         if(it!=groupusers.end())
         {
@@ -239,14 +323,83 @@ int main(int argc,char* argv[])
              vector<int>::iterator i;
              for(i=v.begin();i<v.end();i++)
              {
-                cout<<*i<<" ";
+                //cout<<*i<<" ";
+                if(*i==friendport)
+                {
+                     flag=1;
+                     break;
+                }
              }
         }
-        char ackr='#';
-        if(send(connfd,&ackr,sizeof(ackr),0)<0)
-            perror("ack not sent");
-            fflush(stdout);
-     }    
+        if(flag!=1)
+        {
+                ackr='$';
+                if(send(connfd,&ackr,sizeof(ackr),0)<0)
+                perror("ack not sent"); 
+        }
+        else
+        {
+                ackr='#';
+                if(send(connfd,&ackr,sizeof(ackr),0)<0)
+                    perror("ack not sent"); 
+                 //cout<<"\n";
+                long long n;
+                char fname[100],floc[100];
+                if(n=recv(connfd, &fname,sizeof(fname),0)<0)
+                perror("fname recieving failed\n");
+                string filename(fname);
+                if(n=recv(connfd, &floc,sizeof(floc),0)<0)
+                perror("floc recieving failed");
+                string fileLocation(floc);
+                long long filesize;
+                if(n=recv(connfd, &filesize,sizeof(filesize),0)<0)
+                        perror("filesize recieving failed");
+               // cout<<"fname: "<<filename<<"floc :"<<fileLocation<<"filesize: "<<filesize<<"\n";
+                char filesz[100];
+                snprintf(filesz, sizeof(filesz), "%lld", filesize); 
+                string filesizestr(filesz);
+                fileusers[filename].push_back(friendport);//updated fileusers
+                sizeoffile[filename]=filesize;        //fileinfo added in the map
+                fileinfo[filename].push_back(fileLocation);  //fileinfo updated
+                lof[gid].push_back(filename);//list of files in a group
+                ackr='#';
+                if(send(connfd,&ackr,sizeof(ackr),0)<0)
+                        perror("ack not sent");
+                fflush(stdout);
+        } 
+     }
+     else if(ack=='D')      //To download files
+     {
+        pthread_create(&tid_r,&attr,downloadfile,&connfd);
+        pthread_join(tid_r,NULL);
+     }   
+      else if(ack=='F')      //To download files
+     {
+        int gid,n;
+        if(n=recv(connfd, &gid,sizeof(int),0)<0)
+                perror("gid recieving failed\n");
+        map<int,vector<string> >::iterator it=lof.find(gid);
+        if(it!=lof.end())
+                        {
+                          
+                           vector<string> v(it->second);
+                           vector<string>::iterator i;
+                           int fileno=v.size();
+                           if(send(connfd,&fileno,sizeof(fileno),0)<0)
+                                 perror("ack not sent"); 
+                           for(i=v.begin();i<v.end();i++)
+                               {
+                                   string temp=*i;
+                                   char temp_c[100];
+                                   strcpy(temp_c,temp.c_str());
+                                   if(send(connfd,&temp_c,sizeof(temp_c),0)<0)
+                                     perror("ack not sent"); 
+                                   
+                               }
+                            
+                           
+                          }
+     }   
      else      
      cout<<"not coded\n";
      close(connfd);
