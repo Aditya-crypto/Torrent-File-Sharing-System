@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include<map>
 #include<vector>
-#define BufferSize 50
+#define BufferSize 340788
 #define QUE 5
 using namespace std;
 map<int,int> requestlist; // first:requestport, second: gid to which request arrived
@@ -80,41 +80,96 @@ void* recieve(void* arg)
 }
 void* Download_file(void* arg)
 {
-    string filename;
-    cout<<"enter filename to download\n"; 
-    cin>>filename;
-    struct part_info* chunk=(struct part_info*)malloc(sizeof(struct part_info)*4);
-    pthread_t tids[4];
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-     int portlist[4]={1234,1235,1236,1237};
-     FILE *fp = fopen (filename.c_str(),"wb");
-          char Buffer[BufferSize]; 
-          memset(Buffer,'a',BufferSize);
-          long int file_size=200;
-           int n=50;
-           while(file_size > 0)
-           {      
-                  fwrite(Buffer,sizeof(char),n,fp);
-	          memset(Buffer,'a',BufferSize);
-                  file_size =file_size-n;
-           } 
-        fclose(fp);
-          for(int i=0;i<4;i++)
-          {  
-             FILE *fp1 = fopen (filename.c_str(),"wb");
-             chunk[i].file_p=fp1;
-             chunk[i].portno=portlist[i];
-             chunk[i].chunkinfo.chunk_no=i;
-             strcpy(chunk[i].chunkinfo.fname,filename.c_str());
-             if(pthread_create(&tids[i],&attr,recieve,&chunk[i])<0)
-                   perror("creation error");
-          }
-          for(int i=0;i<4;i++)
-          {
-             pthread_join(tids[i],NULL);
-             cout<<"success thread "<<i<<"\n";
-          }
+     int* trackerport=(int*)malloc(sizeof(int));
+     trackerport=(int*)arg;
+     int trackerPortRetrieve=*trackerport;
+     int sp=socket(AF_INET,SOCK_STREAM,0);
+     struct sockaddr_in addr;
+     memset(&addr,'\0',sizeof(addr));
+     addr.sin_family=AF_INET;
+     addr.sin_port=htons(trackerPortRetrieve);
+     addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+     int n;
+     int res =  connect(sp,(struct sockaddr*)&addr,sizeof(addr));
+        if(res<0)
+        {
+          perror("errorrrrrrr");
+          exit(0);
+        }
+        else
+          cout<<"connected with tracker\n";
+            char ackr='D';
+            if(send(sp,&ackr,sizeof(ackr),0)<0)
+            perror("ack not sent");
+            int gid;
+            cout<<"enter group_id: \n";
+            cin>>gid;
+            int n_gid=gid;
+            int n_serverport=serverport;
+            if(send(sp,&n_gid,sizeof(int),0)<0)
+                perror("gid not sent");
+            if(send(sp,&n_serverport,sizeof(int),0)<0)
+                perror("friendport not sent");
+            char ack;
+            recv(sp,&ack,sizeof(ack),0);
+            if(ack=='$')
+            {
+                cout<<"first join respective group\n";
+            }
+            else
+            {
+                 cout<<"you are part of group\n";  
+                string filename;
+                cout<<"enter filename to download\n"; 
+                cin>>filename;
+                char fname[100];
+                strcpy(fname,filename.c_str());
+                if(send(sp,&fname,sizeof(fname),0)<0)
+                    perror("fname not sent");
+                //char file_sz[100];
+                long long file_size;
+                long long n;
+                if(n=recv(sp,&file_size,sizeof(file_size),0)<0)
+                    perror("username recieving failed\n");
+                
+               // string file_sz_c(file_sz);
+               // stringstream geek(file_sz_c);
+               // geek >> file_size;
+                struct part_info* chunk=(struct part_info*)malloc(sizeof(struct part_info)*4);
+                pthread_t tids[4];
+                pthread_attr_t attr;
+                pthread_attr_init(&attr);
+                int portlist[10];//={1234,1235,1236,1237};
+                if(n=recv(sp,portlist,sizeof(portlist),0)<0)
+                    perror("username recieving failed\n");
+                FILE *fp = fopen (fname,"wb");
+                char Buffer[BufferSize]; 
+                memset(Buffer,'a',BufferSize);
+          
+                int n1=50;
+                while(file_size > 0)
+                {      
+                     fwrite(Buffer,sizeof(char),n1,fp);
+	             memset(Buffer,'a',BufferSize);
+                     file_size =file_size-n1;
+                } 
+                fclose(fp);
+                for(int i=0;i<4;i++)
+                {  
+                        FILE *fp1 = fopen (filename.c_str(),"wb");
+                        chunk[i].file_p=fp1;
+                        chunk[i].portno=portlist[i];
+                        chunk[i].chunkinfo.chunk_no=i;
+                        strcpy(chunk[i].chunkinfo.fname,filename.c_str());
+                        if(pthread_create(&tids[i],&attr,recieve,&chunk[i])<0)
+                        perror("creation error");
+                }
+                for(int i=0;i<4;i++)
+                {
+                        pthread_join(tids[i],NULL);
+                        cout<<"success thread "<<i<<"\n";
+                 }
+             }
     
 }
 void* creat_group(void* arg)
@@ -305,14 +360,42 @@ void* upload_files(void* arg)
             if(send(sp,&n_serverport,sizeof(int),0)<0)
                 perror("friendport not sent");
             char ack;
-          recv(sp,&ack,sizeof(ack),0);
-          if(ack=='#')
+            recv(sp,&ack,sizeof(ack),0);
+            if(ack=='$')
+            {
+                cout<<"first join respective group\n";
+            }
+            else
+            {
+            cout<<"you are part of group\n";
+            string filename,fileLocation;
+            cout<<"enter filename:\n ";
+            cin>>filename;
+            cout<<"enter FileLocation:\n ";
+            cin>>fileLocation;
+            char fname[100],floc[100];
+            strcpy(fname,filename.c_str());
+            strcpy(floc,fileLocation.c_str());
+            if(send(sp,&fname,sizeof(fname),0)<0)
+                perror("friendport not sent");
+            if(send(sp,&floc,sizeof(floc),0)<0)
+                perror("friendport not sent");
+            FILE* fp=fopen(fname,"rb");
+            fseek(fp,0,SEEK_END);
+  	    long long filesize=ftell(fp);
+  	    fclose(fp);
+  	    if(send(sp,&filesize,sizeof(filesize),0)<0)
+                perror("friendport not sent");
+            //char ack;
+            recv(sp,&ack,sizeof(ack),0);
+            if(ack=='#')
              {
                cout<<"uploaded\n";
              }
-          else
+            else
             cout<<"not uploaded\n";
             close(sp);
+          }
             pthread_exit(0);
  }
 void* list_groups(void* arg)
