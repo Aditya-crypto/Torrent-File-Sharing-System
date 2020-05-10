@@ -2,6 +2,10 @@
 This Application let users to upload or download a file from a group they belong to.
 File is Downloaded chunkwise, using piecewise selection algorithm and chunks of a file is downloaded parallel
 from multiple servers.
+
+# Authentication
+  - Registration is needed for a new user, and login is required for old user to enter into Applicaion.
+  
 # Functions Implemented
 - Create Group
   - Any user can create his own group to share his files with other users.
@@ -31,3 +35,5 @@ from multiple servers.
   - File Handling
   - Socket Programming
   - Ubuntu 18.04 OS
+  
+#### note:- Application runs on localhost machine
